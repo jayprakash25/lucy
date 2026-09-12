@@ -10,6 +10,7 @@ import {
 } from "./steps/launch-meta-ad";
 import { buildAdProposal } from "./steps/build-ad-proposal";
 import { completeProviderEvent, failProviderEvent } from "./steps/finish-provider-event";
+import { generateConversationReplyStep } from "./steps/generate-conversation-reply";
 import { prepareProviderEvent } from "./steps/prepare-provider-event";
 import { recordProposalDecisionStep } from "./steps/record-proposal-decision";
 import { sendWhatsAppApprovalStep, sendWhatsAppTextStep } from "./steps/send-whatsapp";
@@ -31,20 +32,28 @@ export async function processProviderEventWorkflow(eventId: string): Promise<{ s
 
     if (event.kind === "image") {
       await storePropertyImage(event);
+      const text = await generateConversationReplyStep({
+        conversationId: event.conversationId,
+        latestMessageType: "image",
+      });
       await sendWhatsAppTextStep({
         ...sendContext(event),
         proposalId: null,
         operationKey: `event:${event.sourceEventId}:image-saved`,
-        text: "Photo saved. Send more details or photos, then reply DONE.",
+        text,
       });
     }
 
     if (event.kind === "acknowledge") {
+      const text = await generateConversationReplyStep({
+        conversationId: event.conversationId,
+        latestMessageType: event.messageType,
+      });
       await sendWhatsAppTextStep({
         ...sendContext(event),
         proposalId: null,
         operationKey: `event:${event.sourceEventId}:acknowledge`,
-        text: "Saved. Send more details or photos, then reply DONE.",
+        text,
       });
     }
 

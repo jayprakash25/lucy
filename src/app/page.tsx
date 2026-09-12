@@ -12,9 +12,7 @@ export default function HomePage() {
           <span>Lucy</span>
         </Link>
 
-        <Link href="/connect" className="header-link">
-          Connect Meta
-        </Link>
+        <div className="header-actions"><Link href="/demo" className="header-link">Open demo</Link><Link href="/connect" className="header-link">Connect Meta</Link></div>
       </header>
 
       <section className="hero">
@@ -25,9 +23,7 @@ export default function HomePage() {
             Send photos on WhatsApp. Lucy builds the campaign and waits for your approval before anything goes live.
           </p>
           <div className="hero-actions">
-            <Link href="/connect" className="primary-button">
-              Connect Meta
-            </Link>
+            <Link href="/demo" className="primary-button">Try the safe demo</Link>
             <p>No ads run without your approval.</p>
           </div>
         </div>

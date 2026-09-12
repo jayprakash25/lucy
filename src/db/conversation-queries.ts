@@ -10,6 +10,10 @@ export type ConversationMessage = {
   occurredAt: string;
 };
 
+export type ConversationHistoryMessage = ConversationMessage & {
+  direction: "inbound" | "outbound";
+};
+
 export type StoredMessage = {
   id: string;
   conversationId: string;
@@ -63,6 +67,25 @@ export async function listConversationMessages(conversationId: string): Promise<
 
   return (data ?? []).map((row) => ({
     id: row.id,
+    messageType: row.message_type,
+    text: row.text_content,
+    occurredAt: row.occurred_at,
+  }));
+}
+
+export async function listConversationHistory(conversationId: string): Promise<ConversationHistoryMessage[]> {
+  const database = createDatabaseClient();
+  const { data, error } = await database
+    .from("messages")
+    .select("id, direction, message_type, text_content, occurred_at")
+    .eq("conversation_id", conversationId)
+    .order("occurred_at", { ascending: true })
+    .limit(100);
+  throwDatabaseError("Could not load conversation history", error);
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    direction: row.direction as "inbound" | "outbound",
     messageType: row.message_type,
     text: row.text_content,
     occurredAt: row.occurred_at,

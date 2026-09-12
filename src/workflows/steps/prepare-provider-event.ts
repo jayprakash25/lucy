@@ -16,6 +16,7 @@ export type PreparedEvent =
       conversationId: string;
       recipient: string;
       sourceEventId: string;
+      messageType: string;
     }
   | {
       kind: "draft";
@@ -127,6 +128,7 @@ export async function prepareProviderEvent(eventId: string): Promise<PreparedEve
     conversationId: storedMessage.conversationId,
     recipient: message.from,
     sourceEventId: event.id,
+    messageType: message.type,
   };
 }
 
