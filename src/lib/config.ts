@@ -53,6 +53,9 @@ export const config = {
   get metaAccessToken() {
     return readRequired("META_ACCESS_TOKEN");
   },
+  get metaAdsAccessToken() {
+    return readOptional("META_ADS_ACCESS_TOKEN", this.metaAccessToken);
+  },
   get metaGraphVersion() {
     return readOptional("META_GRAPH_VERSION", "v26.0");
   },

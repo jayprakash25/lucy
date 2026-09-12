@@ -107,9 +107,31 @@ type ProviderOperationRow = {
   updated_at: string;
 };
 
+type CampaignWorkflowRow = {
+  id: string; business_id: string; conversation_id: string | null; status: string;
+  property_profile: Json; media_manifest: Json; current_creative_version: number;
+  creative_approved_version: number | null; creative_approved_hash: string | null;
+  creative_approved_at: string | null; creative_approved_by: string | null;
+  campaign_configuration: Json | null; campaign_configuration_hash: string | null;
+  final_proposal_id: string | null; created_at: string; updated_at: string;
+};
+
+type CreativeVersionRow = { id: string; workflow_id: string; version: number; format: string; content: Json; content_hash: string; change_request: string | null; created_at: string };
+
 export type Database = {
   public: {
     Tables: {
+      businesses: Table<{
+        id: string;
+        slug: string;
+        name: string;
+        timezone: string;
+        currency: string;
+        maximum_daily_budget_minor: number;
+        maximum_total_budget_minor: number;
+        created_at: string;
+        updated_at: string;
+      }>;
       operator_identities: Table<{
         id: string;
         business_id: string;
@@ -127,6 +149,19 @@ export type Database = {
       ad_proposal_versions: Table<ProposalRow>;
       approvals: Table<ApprovalRow>;
       provider_operations: Table<ProviderOperationRow>;
+      campaign_workflows: Table<CampaignWorkflowRow>;
+      creative_versions: Table<CreativeVersionRow>;
+      audit_events: Table<{
+        id: number;
+        business_id: string;
+        actor_type: string;
+        actor_external_id: string | null;
+        event_type: string;
+        subject_type: string;
+        subject_id: string;
+        metadata: Json;
+        created_at: string;
+      }>;
     };
     Views: Record<string, never>;
     Functions: {
@@ -186,6 +221,10 @@ export type Database = {
           remote_id: string | null;
           should_execute: boolean;
         }>;
+      };
+      approve_workflow_creative: {
+        Args: { p_workflow_id: string; p_version: number; p_content_hash: string; p_approver: string };
+        Returns: CampaignWorkflowRow[];
       };
     };
     Enums: Record<string, never>;

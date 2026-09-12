@@ -128,7 +128,7 @@ async function callMeta(path: string, fields: Record<string, unknown> | FormData
   try {
     response = await fetch(url, {
       method: "POST",
-      headers: { Authorization: `Bearer ${config.metaAccessToken}` },
+      headers: { Authorization: `Bearer ${config.metaAdsAccessToken}` },
       body,
       signal: AbortSignal.timeout(20_000),
     });
