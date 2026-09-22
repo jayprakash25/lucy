@@ -1,13 +1,18 @@
 import "server-only";
 
-import { completeWebhookEvent, failWebhookEvent } from "@/db/webhook-queries";
+import { completeWebhookEvent, failWebhookEvent, renewWebhookEventLease } from "@/db/webhook-queries";
 
-export async function completeProviderEvent(eventId: string): Promise<void> {
+export async function renewProviderEventLease(eventId: string, processingToken: string): Promise<void> {
   "use step";
-  await completeWebhookEvent(eventId);
+  await renewWebhookEventLease(eventId, processingToken);
 }
 
-export async function failProviderEvent(eventId: string, reason: string): Promise<void> {
+export async function completeProviderEvent(eventId: string, processingToken: string): Promise<void> {
   "use step";
-  await failWebhookEvent(eventId, reason.slice(0, 1_000));
+  await completeWebhookEvent(eventId, processingToken);
+}
+
+export async function failProviderEvent(eventId: string, processingToken: string, reason: string): Promise<void> {
+  "use step";
+  await failWebhookEvent(eventId, processingToken, reason.slice(0, 1_000));
 }

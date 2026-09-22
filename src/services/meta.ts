@@ -1,10 +1,17 @@
 import "server-only";
 
-import { createHash } from "node:crypto";
+import { z } from "zod";
 
 import type { AdProposalContent } from "@/domain/ad-proposal";
 import { config } from "@/lib/config";
-import { AmbiguousMutationError, ExternalServiceError } from "@/lib/errors";
+import { AmbiguousMutationError } from "@/lib/errors";
+
+import { postMeta } from "./meta-client";
+
+const MetaIdResponseSchema = z.object({ id: z.string().min(1) });
+const MetaImageResponseSchema = z.object({
+  images: z.record(z.string(), z.object({ hash: z.string().min(1).optional() })),
+});
 
 export type CreateCampaignInput = {
   name: string;
@@ -42,10 +49,6 @@ export async function createPausedAdSet(input: {
 }
 
 export async function uploadAdImage(input: { bytes: Uint8Array; mimeType: string }): Promise<string> {
-  if (config.providerMode === "mock") {
-    return mockId("image", Buffer.from(input.bytes).toString("base64"));
-  }
-
   const form = new FormData();
   const arrayBuffer = input.bytes.buffer.slice(
     input.bytes.byteOffset,
@@ -53,9 +56,8 @@ export async function uploadAdImage(input: { bytes: Uint8Array; mimeType: string
   ) as ArrayBuffer;
   form.set("filename", new Blob([arrayBuffer], { type: input.mimeType }), "property-image");
 
-  const body = await callMeta(`act_${config.metaAdAccountId}/adimages`, form);
-  const images = body.images as Record<string, { hash?: string }> | undefined;
-  const hash = images ? Object.values(images)[0]?.hash : undefined;
+  const body = await postMeta(`act_${config.metaAdAccountId}/adimages`, form, MetaImageResponseSchema);
+  const hash = Object.values(body.images)[0]?.hash;
   if (!hash) {
     throw new AmbiguousMutationError("Meta accepted the image without returning an image hash.", "meta");
   }
@@ -108,57 +110,10 @@ async function createMetaObject(
   fields: Record<string, unknown>,
   stableId?: string,
 ): Promise<string> {
-  if (config.providerMode === "mock") {
-    return stableId ?? mockId(path.split("/").at(-1) ?? "object", JSON.stringify(fields));
-  }
-
-  const body = await callMeta(path, fields);
-  const id = typeof body.id === "string" ? body.id : stableId;
+  const body = await postMeta(path, fields, MetaIdResponseSchema.or(z.object({ success: z.boolean() })));
+  const id = "id" in body ? body.id : stableId;
   if (!id) {
     throw new AmbiguousMutationError("Meta accepted the mutation without returning an object ID.", "meta");
   }
   return id;
-}
-
-async function callMeta(path: string, fields: Record<string, unknown> | FormData): Promise<Record<string, unknown>> {
-  const url = `https://graph.facebook.com/${config.metaGraphVersion}/${path}`;
-  const body = fields instanceof FormData ? fields : toFormData(fields);
-
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${config.metaAccessToken}` },
-      body,
-      signal: AbortSignal.timeout(20_000),
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Network failure";
-    throw new AmbiguousMutationError(`Meta mutation outcome is uncertain: ${message}`, "meta");
-  }
-
-  const result = (await response.json().catch(() => ({}))) as Record<string, unknown> & {
-    error?: { message?: string; code?: number };
-  };
-  if (!response.ok) {
-    const message = result.error?.message ?? `Meta returned HTTP ${response.status}`;
-    if (response.status === 429 || response.status >= 500) {
-      throw new AmbiguousMutationError(`Meta mutation outcome is uncertain: ${message}`, "meta", response.status);
-    }
-    throw new ExternalServiceError(`Meta rejected the mutation: ${message}`, "meta", response.status);
-  }
-
-  return result;
-}
-
-function toFormData(fields: Record<string, unknown>): FormData {
-  const form = new FormData();
-  for (const [key, value] of Object.entries(fields)) {
-    form.set(key, typeof value === "object" ? JSON.stringify(value) : String(value));
-  }
-  return form;
-}
-
-function mockId(type: string, seed: string): string {
-  return `mock_${type}_${createHash("sha256").update(seed).digest("hex").slice(0, 16)}`;
 }

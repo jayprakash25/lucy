@@ -48,3 +48,30 @@ test("rejects malformed payloads at the boundary", () => {
     InvalidWebhookError,
   );
 });
+
+test("accepts PDFs and safely ignores unsupported document types", () => {
+  const payload = (mimeType: string) =>
+    JSON.stringify({
+      object: "whatsapp_business_account",
+      entry: [{
+        id: "waba-1",
+        changes: [{
+          field: "messages",
+          value: {
+            messaging_product: "whatsapp",
+            metadata: { phone_number_id: "phone-1" },
+            messages: [{
+              id: "wamid.document",
+              from: "919000000000",
+              timestamp: "1788020000",
+              type: "document",
+              document: { id: "media-1", mime_type: mimeType, filename: "brochure.pdf" },
+            }],
+          },
+        }],
+      }],
+    });
+
+  assert.equal(extractWhatsAppEvents(payload("application/pdf"))[0]?.eventType, "message.document");
+  assert.equal(extractWhatsAppEvents(payload("text/plain")).length, 0);
+});

@@ -48,14 +48,15 @@ test("approval preview contains the exact outbound copy and fits WhatsApp", () =
       description: "Verified description",
     },
     evidence: [
-      { field: "projectName", quote: "Lake View" },
-      { field: "locality", quote: "Whitefield" },
-      { field: "city", quote: "Bengaluru" },
-      { field: "price", quote: "INR 1.2 crore" },
-      { field: "configuration", quote: "3 BHK" },
+      { field: "projectName", quote: "Lake View", sourceType: "message", sourceId: "5a7497d2-65c4-4b2e-a29f-d9f7bc47aade" },
+      { field: "locality", quote: "Whitefield", sourceType: "message", sourceId: "5a7497d2-65c4-4b2e-a29f-d9f7bc47aade" },
+      { field: "city", quote: "Bengaluru", sourceType: "message", sourceId: "5a7497d2-65c4-4b2e-a29f-d9f7bc47aade" },
+      { field: "price", quote: "INR 1.2 crore", sourceType: "message", sourceId: "5a7497d2-65c4-4b2e-a29f-d9f7bc47aade" },
+      { field: "configuration", quote: "3 BHK", sourceType: "message", sourceId: "5a7497d2-65c4-4b2e-a29f-d9f7bc47aade" },
     ],
     campaign,
     mediaAssetIds: ["5a7497d2-65c4-4b2e-a29f-d9f7bc47aade"],
+    creativeMediaAssetId: "5a7497d2-65c4-4b2e-a29f-d9f7bc47aade",
   });
 
   const preview = formatProposalPreview(content, 2);
@@ -64,4 +65,26 @@ test("approval preview contains the exact outbound copy and fits WhatsApp", () =
   assert.match(preview, /Primary text: Verified primary copy for the property\./);
   assert.match(preview, /Description: Verified description/);
   assert.ok(preview.length <= 1_024);
+});
+
+test("requires the approved creative to be one of the selected media assets", () => {
+  assert.throws(
+    () => AdProposalContentSchema.parse({
+      property: {
+        projectName: "Lake View", locality: "Whitefield", city: "Bengaluru",
+        price: "INR 1.2 crore", configuration: "3 BHK", area: null,
+        possession: null, registrationId: null, amenities: [],
+      },
+      copy: { primaryText: "Copy", headline: "Headline", description: "Description" },
+      evidence: Array.from({ length: 5 }, (_, index) => ({
+        field: ["projectName", "locality", "city", "price", "configuration"][index],
+        quote: "Evidence", sourceType: "message",
+        sourceId: "5a7497d2-65c4-4b2e-a29f-d9f7bc47aade",
+      })),
+      campaign,
+      mediaAssetIds: ["5a7497d2-65c4-4b2e-a29f-d9f7bc47aade"],
+      creativeMediaAssetId: "df00408c-83b5-4500-bddb-b800638d7e49",
+    }),
+    /Creative media/,
+  );
 });

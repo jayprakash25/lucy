@@ -31,13 +31,18 @@ export const FactEvidenceSchema = z.object({
     "amenities",
   ]),
   quote: z.string().min(1).max(500),
+  sourceType: z.literal("message"),
+  sourceId: z.string().uuid(),
 });
 
-export const GeneratedAdDraftSchema = z.object({
-  property: PropertyBriefSchema.nullable(),
-  copy: AdCopySchema.nullable(),
-  missingFields: z.array(z.string()),
-  evidence: z.array(FactEvidenceSchema),
+export const AdDraftInputSchema = z.object({
+  property: PropertyBriefSchema,
+  evidence: z.array(FactEvidenceSchema).min(5),
+  mediaAssetIds: z.array(z.string().uuid()).min(1).max(4),
+  creativeMediaAssetId: z.string().uuid(),
+}).refine((draft) => draft.mediaAssetIds.includes(draft.creativeMediaAssetId), {
+  message: "Creative media must be one of the selected media assets.",
+  path: ["creativeMediaAssetId"],
 });
 
 export const CampaignSettingsSchema = z.object({
@@ -58,10 +63,23 @@ export const AdProposalContentSchema = z.object({
   evidence: z.array(FactEvidenceSchema).min(5),
   campaign: CampaignSettingsSchema,
   mediaAssetIds: z.array(z.string().uuid()).min(1).max(10),
+  creativeMediaAssetId: z.string().uuid(),
+}).refine((proposal) => proposal.mediaAssetIds.includes(proposal.creativeMediaAssetId), {
+  message: "Creative media must be one of the selected media assets.",
+  path: ["creativeMediaAssetId"],
 });
 
 export type AdProposalContent = z.infer<typeof AdProposalContentSchema>;
-export type GeneratedAdDraft = z.infer<typeof GeneratedAdDraftSchema>;
+export type AdDraftInput = z.infer<typeof AdDraftInputSchema>;
+export type FactEvidence = z.infer<typeof FactEvidenceSchema>;
+
+export function createGroundedAdCopy(property: z.infer<typeof PropertyBriefSchema>): z.infer<typeof AdCopySchema> {
+  return AdCopySchema.parse({
+    headline: `${property.configuration} at ${property.projectName}`.slice(0, 80),
+    primaryText: `${property.configuration} homes at ${property.projectName}, ${property.locality}, ${property.city}. Starting at ${property.price}. Message us on WhatsApp for details.`.slice(0, 280),
+    description: `Explore ${property.projectName} in ${property.locality}.`.slice(0, 100),
+  });
+}
 
 export function assertSpendWithinLimits(
   settings: z.infer<typeof CampaignSettingsSchema>,
@@ -97,7 +115,7 @@ export function formatProposalPreview(content: AdProposalContent, version: numbe
     `Budget: ${money.format(content.campaign.dailyBudgetMinor / 100)}/day for ${content.campaign.durationDays} days`,
     `Maximum spend: ${money.format(total / 100)}`,
     `Schedule: ${formatDate(content.campaign.startAt, content.campaign.timeZone)} to ${formatDate(content.campaign.endAt, content.campaign.timeZone)}`,
-    `Photos: ${content.mediaAssetIds.length}`,
+    `Media: ${content.mediaAssetIds.length}; one selected property photo is the ad creative`,
     "",
     "Approve only if every fact, image, and spend limit is correct.",
   ].join("\n");

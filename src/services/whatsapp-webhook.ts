@@ -8,29 +8,43 @@ const metadataSchema = z.object({
   phone_number_id: z.string().min(1),
 });
 
-const messageSchema = z
-  .object({
-    id: z.string().min(1),
-    from: z.string().min(1),
-    timestamp: z.string().min(1),
-    type: z.string().min(1),
-    text: z.object({ body: z.string() }).optional(),
-    image: z
-      .object({
-        id: z.string().min(1),
-        mime_type: z.string().min(1),
-        sha256: z.string().optional(),
-        caption: z.string().optional(),
-      })
-      .optional(),
-    interactive: z
-      .object({
-        type: z.string(),
-        button_reply: z.object({ id: z.string(), title: z.string() }).optional(),
-      })
-      .optional(),
-  })
-  .passthrough();
+const messageBase = {
+  id: z.string().min(1),
+  from: z.string().min(1),
+  timestamp: z.string().min(1),
+};
+const messageSchema = z.discriminatedUnion("type", [
+  z.object({ ...messageBase, type: z.literal("text"), text: z.object({ body: z.string().min(1) }) }).passthrough(),
+  z.object({
+    ...messageBase,
+    type: z.literal("image"),
+    image: z.object({
+      id: z.string().min(1),
+      mime_type: z.enum(["image/jpeg", "image/png"]),
+      sha256: z.string().optional(),
+      caption: z.string().optional(),
+    }),
+  }).passthrough(),
+  z.object({
+    ...messageBase,
+    type: z.literal("document"),
+    document: z.object({
+      id: z.string().min(1),
+      mime_type: z.literal("application/pdf"),
+      sha256: z.string().optional(),
+      filename: z.string().max(255).optional(),
+      caption: z.string().optional(),
+    }),
+  }).passthrough(),
+  z.object({
+    ...messageBase,
+    type: z.literal("interactive"),
+    interactive: z.object({
+      type: z.literal("button_reply"),
+      button_reply: z.object({ id: z.string().min(1), title: z.string().min(1) }),
+    }),
+  }).passthrough(),
+]);
 
 const statusSchema = z
   .object({
@@ -45,7 +59,7 @@ const valueSchema = z
   .object({
     messaging_product: z.literal("whatsapp"),
     metadata: metadataSchema,
-    messages: z.array(messageSchema).optional(),
+    messages: z.array(z.unknown()).optional(),
     statuses: z.array(statusSchema).optional(),
   })
   .passthrough();
@@ -91,7 +105,10 @@ export function extractWhatsAppEvents(rawBody: string): ProviderEventInput[] {
     for (const change of entry.changes) {
       const { metadata } = change.value;
 
-      for (const message of change.value.messages ?? []) {
+      for (const candidate of change.value.messages ?? []) {
+        const parsedMessage = messageSchema.safeParse(candidate);
+        if (!parsedMessage.success) continue;
+        const message = parsedMessage.data;
         events.push({
           provider: "whatsapp",
           channelExternalId: metadata.phone_number_id,

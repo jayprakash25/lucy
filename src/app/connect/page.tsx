@@ -17,10 +17,10 @@ export default function ConnectPage() {
           <li>Supabase project and private media bucket</li>
           <li>Meta Business Portfolio, Page, funded ad account, and system user</li>
           <li>Linked WhatsApp Business Account and production number</li>
-          <li>OpenAI project key and supported Structured Outputs model</li>
+          <li>AI Gateway key and supported model</li>
           <li>Webhook subscriptions, operator allowlist, and hard spend limits</li>
         </ol>
-        <p className="setup-note">Start in mock mode. Activate one tiny, approved campaign only after the complete integration checklist passes.</p>
+        <p className="setup-note">Activate one tiny, approved campaign only after the complete integration checklist passes.</p>
       </section>
     </main>
   );

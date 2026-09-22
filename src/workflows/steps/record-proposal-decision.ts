@@ -15,7 +15,7 @@ export async function recordProposalDecisionStep(input: {
 
   const proposal = await recordProposalDecision({
     businessId: input.businessId,
-    tokenHash: hashApprovalToken(input.approvalToken, config.approvalHmacSecret),
+    tokenHash: await hashApprovalToken(input.approvalToken, config.approvalHmacSecret),
     action: input.action,
     approverExternalId: input.approverExternalId,
     sourceExternalMessageId: input.sourceMessageId,

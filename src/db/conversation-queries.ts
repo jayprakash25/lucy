@@ -5,6 +5,7 @@ import { requireDatabaseData, throwDatabaseError } from "./database-error";
 
 export type ConversationMessage = {
   id: string;
+  direction: "inbound" | "outbound";
   messageType: string;
   text: string | null;
   occurredAt: string;
@@ -17,7 +18,9 @@ export type StoredMessage = {
 
 export type MediaAsset = {
   id: string;
+  byteSize: number;
   mimeType: string;
+  providerMediaId: string;
   storagePath: string;
 };
 
@@ -50,19 +53,62 @@ export async function recordInboundMessage(input: {
   return { id: message.message_id, conversationId: message.conversation_id };
 }
 
-export async function listConversationMessages(conversationId: string): Promise<ConversationMessage[]> {
+export async function getConversationDraftBoundary(
+  conversationId: string,
+  currentSourceEventId: string,
+): Promise<string | null> {
+  const database = createDatabaseClient();
+  const { data, error } = await database
+    .from("ad_proposal_versions")
+    .select("source_event_id, created_at")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: false })
+    .limit(5);
+  throwDatabaseError("Could not load the draft boundary", error);
+  return data?.find((proposal) => proposal.source_event_id !== currentSourceEventId)?.created_at ?? null;
+}
+
+export async function listConversationMessages(
+  conversationId: string,
+  afterCreatedAt: string | null = null,
+): Promise<ConversationMessage[]> {
+  const database = createDatabaseClient();
+  let query = database
+    .from("messages")
+    .select("id, direction, message_type, text_content, occurred_at")
+    .eq("conversation_id", conversationId)
+    .order("occurred_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(24);
+  if (afterCreatedAt) query = query.gt("created_at", afterCreatedAt);
+  const { data, error } = await query;
+  throwDatabaseError("Could not load conversation messages", error);
+
+  return (data ?? []).reverse().map((row) => ({
+    id: row.id,
+    direction: row.direction as ConversationMessage["direction"],
+    messageType: row.message_type,
+    text: row.text_content,
+    occurredAt: row.occurred_at,
+  }));
+}
+
+export async function listConversationMessagesByIds(
+  conversationId: string,
+  messageIds: string[],
+): Promise<ConversationMessage[]> {
+  if (messageIds.length === 0) return [];
   const database = createDatabaseClient();
   const { data, error } = await database
     .from("messages")
-    .select("id, message_type, text_content, occurred_at")
+    .select("id, direction, message_type, text_content, occurred_at")
     .eq("conversation_id", conversationId)
-    .eq("direction", "inbound")
-    .order("occurred_at", { ascending: true })
-    .limit(100);
-  throwDatabaseError("Could not load conversation messages", error);
-
+    .in("id", messageIds);
+  throwDatabaseError("Could not load proposal evidence messages", error);
   return (data ?? []).map((row) => ({
     id: row.id,
+    direction: row.direction as ConversationMessage["direction"],
     messageType: row.message_type,
     text: row.text_content,
     occurredAt: row.occurred_at,
@@ -111,17 +157,51 @@ export async function storeMediaAsset(input: {
   return storedAsset.id;
 }
 
-export async function listConversationMedia(conversationId: string): Promise<MediaAsset[]> {
+export async function listConversationMedia(
+  conversationId: string,
+  afterCreatedAt: string | null = null,
+): Promise<MediaAsset[]> {
+  const database = createDatabaseClient();
+  let query = database
+    .from("media_assets")
+    .select("id, byte_size, mime_type, provider_media_id, storage_path")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: false })
+    .limit(10);
+  if (afterCreatedAt) query = query.gt("created_at", afterCreatedAt);
+  const { data, error } = await query;
+  throwDatabaseError("Could not load property media", error);
+
+  return (data ?? [])
+    .reverse()
+    .map((row) => ({
+      id: row.id,
+      byteSize: row.byte_size,
+      mimeType: row.mime_type,
+      providerMediaId: row.provider_media_id,
+      storagePath: row.storage_path,
+    }));
+}
+
+export async function listConversationMediaByIds(
+  conversationId: string,
+  mediaAssetIds: string[],
+): Promise<MediaAsset[]> {
+  if (mediaAssetIds.length === 0) return [];
   const database = createDatabaseClient();
   const { data, error } = await database
     .from("media_assets")
-    .select("id, mime_type, storage_path")
+    .select("id, byte_size, mime_type, provider_media_id, storage_path")
     .eq("conversation_id", conversationId)
-    .order("created_at", { ascending: true })
-    .limit(10);
-  throwDatabaseError("Could not load property media", error);
-
-  return (data ?? []).map((row) => ({ id: row.id, mimeType: row.mime_type, storagePath: row.storage_path }));
+    .in("id", mediaAssetIds);
+  throwDatabaseError("Could not load proposal media", error);
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    byteSize: row.byte_size,
+    mimeType: row.mime_type,
+    providerMediaId: row.provider_media_id,
+    storagePath: row.storage_path,
+  }));
 }
 
 export async function getMediaBytes(mediaAssetId: string, businessId: string): Promise<{

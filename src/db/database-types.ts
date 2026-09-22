@@ -56,6 +56,7 @@ type WebhookEventRow = {
   payload: Json;
   status: string;
   workflow_run_id: string | null;
+  processing_token: string | null;
   receive_count: number;
   last_error: string | null;
   created_at: string;
@@ -66,12 +67,16 @@ type ProposalRow = {
   id: string;
   business_id: string;
   conversation_id: string;
+  source_event_id: string | null;
   version: number;
   status: string;
   content: Json;
   content_hash: string;
   approval_token_hash: string;
   approval_expires_at: string;
+  decision_action: string | null;
+  decision_source_external_message_id: string | null;
+  decided_by_external_id: string | null;
   meta_campaign_id: string | null;
   meta_ad_set_id: string | null;
   meta_creative_id: string | null;
@@ -107,6 +112,19 @@ type ProviderOperationRow = {
   updated_at: string;
 };
 
+type AuditEventRow = {
+  id: number;
+  business_id: string;
+  actor_type: string;
+  actor_external_id: string | null;
+  event_type: string;
+  subject_type: string;
+  subject_id: string;
+  dedupe_key: string | null;
+  metadata: Json;
+  created_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -127,6 +145,7 @@ export type Database = {
       ad_proposal_versions: Table<ProposalRow>;
       approvals: Table<ApprovalRow>;
       provider_operations: Table<ProviderOperationRow>;
+      audit_events: Table<AuditEventRow>;
     };
     Views: Record<string, never>;
     Functions: {
@@ -135,8 +154,12 @@ export type Database = {
         Returns: Array<{ event_id: string; should_start: boolean }>;
       };
       claim_webhook_event: {
-        Args: { p_event_id: string };
+        Args: { p_event_id: string; p_processing_token: string };
         Returns: WebhookEventRow[];
+      };
+      renew_webhook_event_lease: {
+        Args: { p_event_id: string; p_processing_token: string };
+        Returns: boolean;
       };
       record_inbound_whatsapp_message: {
         Args: {
@@ -154,6 +177,7 @@ export type Database = {
         Args: {
           p_business_id: string;
           p_conversation_id: string;
+          p_source_event_id: string;
           p_content: Json;
           p_content_hash: string;
           p_approval_token_hash: string;

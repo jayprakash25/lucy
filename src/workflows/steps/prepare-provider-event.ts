@@ -9,23 +9,17 @@ import { parseApprovalCommand } from "@/lib/approval-token";
 import { StoredWhatsAppPayloadSchema } from "@/services/whatsapp-webhook";
 
 export type PreparedEvent =
-  | { kind: "duplicate" | "meta" | "status" }
+  | { kind: "deferred" | "duplicate" | "meta" | "status" }
   | {
-      kind: "acknowledge";
+      kind: "agent";
       businessId: string;
       conversationId: string;
       recipient: string;
       sourceEventId: string;
+      currentText: string | null;
     }
   | {
-      kind: "draft";
-      businessId: string;
-      conversationId: string;
-      recipient: string;
-      sourceEventId: string;
-    }
-  | {
-      kind: "image";
+      kind: "media";
       businessId: string;
       conversationId: string;
       messageId: string;
@@ -34,6 +28,7 @@ export type PreparedEvent =
       sourceEventId: string;
       mimeType: string;
       sha256: string | null;
+      currentText: string | null;
     }
   | {
       kind: "proposal-decision";
@@ -46,13 +41,14 @@ export type PreparedEvent =
       sourceMessageId: string;
     };
 
-export async function prepareProviderEvent(eventId: string): Promise<PreparedEvent> {
+export async function prepareProviderEvent(eventId: string, processingToken: string): Promise<PreparedEvent> {
   "use step";
 
-  const event = await claimWebhookEvent(eventId);
-  if (!event) {
-    return { kind: "duplicate" };
+  const claim = await claimWebhookEvent(eventId, processingToken);
+  if (claim.kind !== "claimed") {
+    return { kind: claim.kind };
   }
+  const event = claim.event;
 
   if (event.provider === "meta") {
     return { kind: "meta" };
@@ -69,7 +65,14 @@ export async function prepareProviderEvent(eventId: string): Promise<PreparedEve
     return { kind: "status" };
   }
 
-  const text = message.text?.body ?? message.image?.caption ?? message.interactive?.button_reply?.title ?? null;
+  const text =
+    message.type === "text"
+      ? message.text.body
+      : message.type === "image"
+        ? (message.image.caption ?? null)
+        : message.type === "document"
+          ? (message.document.caption ?? null)
+          : message.interactive.button_reply.title;
   const storedMessage = await recordInboundMessage({
     businessId: event.businessId,
     externalContactId: message.from,
@@ -80,22 +83,24 @@ export async function prepareProviderEvent(eventId: string): Promise<PreparedEve
     text,
   });
 
-  if (message.type === "image" && message.image) {
+  if (message.type === "image" || message.type === "document") {
+    const media = message.type === "image" ? message.image : message.document;
     return {
-      kind: "image",
+      kind: "media",
       businessId: event.businessId,
       conversationId: storedMessage.conversationId,
       messageId: storedMessage.id,
-      providerMediaId: message.image.id,
+      providerMediaId: media.id,
       recipient: message.from,
       sourceEventId: event.id,
-      mimeType: message.image.mime_type,
-      sha256: message.image.sha256 ?? null,
+      mimeType: media.mime_type,
+      sha256: media.sha256 ?? null,
+      currentText: text,
     };
   }
 
-  const buttonId = message.interactive?.button_reply?.id;
-  if (buttonId) {
+  if (message.type === "interactive") {
+    const buttonId = message.interactive.button_reply.id;
     const command = parseApprovalCommand(buttonId);
     if (command.action !== "unknown") {
       return {
@@ -111,25 +116,12 @@ export async function prepareProviderEvent(eventId: string): Promise<PreparedEve
     }
   }
 
-  if (isDraftRequest(message.text?.body ?? "")) {
-    return {
-      kind: "draft",
-      businessId: event.businessId,
-      conversationId: storedMessage.conversationId,
-      recipient: message.from,
-      sourceEventId: event.id,
-    };
-  }
-
   return {
-    kind: "acknowledge",
+    kind: "agent",
     businessId: event.businessId,
     conversationId: storedMessage.conversationId,
     recipient: message.from,
     sourceEventId: event.id,
+    currentText: text,
   };
-}
-
-export function isDraftRequest(text: string): boolean {
-  return ["done", "done uploading", "create ad", "generate ad"].includes(text.trim().toLowerCase());
 }

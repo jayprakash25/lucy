@@ -64,46 +64,98 @@ export async function markWebhookDispatchFailed(eventId: string, reason: string)
   throwDatabaseError("Could not record workflow dispatch failure", error);
 }
 
-export async function claimWebhookEvent(eventId: string): Promise<StoredProviderEvent | null> {
+export type WebhookClaim =
+  | { kind: "claimed"; event: StoredProviderEvent }
+  | { kind: "deferred" | "duplicate" };
+
+export async function claimWebhookEvent(eventId: string, processingToken: string): Promise<WebhookClaim> {
   const database = createDatabaseClient();
-  const { data, error } = await database.rpc("claim_webhook_event", { p_event_id: eventId });
+  const { data, error } = await database.rpc("claim_webhook_event", {
+    p_event_id: eventId,
+    p_processing_token: processingToken,
+  });
   throwDatabaseError("Could not claim webhook event", error);
 
   const row = ((data ?? []) as WebhookRow[])[0];
   if (!row) {
-    return null;
+    const { data: current, error: lookupError } = await database
+      .from("webhook_events")
+      .select("status")
+      .eq("id", eventId)
+      .single();
+    throwDatabaseError("Could not inspect webhook event", lookupError);
+
+    return { kind: current?.status === "dispatching" ? "deferred" : "duplicate" };
   }
 
   return {
-    id: row.id,
-    businessId: row.business_id,
-    provider: row.provider,
-    channelExternalId: row.channel_external_id,
-    externalEventId: row.external_event_id,
-    eventType: row.event_type,
-    occurredAt: row.occurred_at,
-    payload: row.payload,
-    status: row.status,
+    kind: "claimed",
+    event: {
+      id: row.id,
+      businessId: row.business_id,
+      provider: row.provider,
+      channelExternalId: row.channel_external_id,
+      externalEventId: row.external_event_id,
+      eventType: row.event_type,
+      occurredAt: row.occurred_at,
+      payload: row.payload,
+      status: row.status,
+    },
   };
 }
 
-export async function completeWebhookEvent(eventId: string): Promise<void> {
-  await updateWebhookEventStatus(eventId, "completed", null);
+export async function completeWebhookEvent(eventId: string, processingToken: string): Promise<void> {
+  await updateWebhookEventStatus(eventId, processingToken, "completed", null);
 }
 
-export async function failWebhookEvent(eventId: string, reason: string): Promise<void> {
-  await updateWebhookEventStatus(eventId, "failed", reason);
+export async function renewWebhookEventLease(eventId: string, processingToken: string): Promise<void> {
+  const database = createDatabaseClient();
+  const { data, error } = await database.rpc("renew_webhook_event_lease", {
+    p_event_id: eventId,
+    p_processing_token: processingToken,
+  });
+  throwDatabaseError("Could not renew webhook processing lease", error);
+  if (!data) throw new Error("Could not renew webhook processing lease: lease was lost.");
+}
+
+export async function isWebhookEventLeaseActive(
+  eventId: string,
+  businessId: string,
+  processingToken: string,
+): Promise<boolean> {
+  const cutoff = new Date(Date.now() - 5 * 60 * 1_000).toISOString();
+  const database = createDatabaseClient();
+  const { count, error } = await database
+    .from("webhook_events")
+    .select("id", { count: "exact", head: true })
+    .eq("id", eventId)
+    .eq("business_id", businessId)
+    .eq("status", "processing")
+    .eq("processing_token", processingToken)
+    .gte("updated_at", cutoff);
+  throwDatabaseError("Could not verify webhook processing lease", error);
+  return count === 1;
+}
+
+export async function failWebhookEvent(eventId: string, processingToken: string, reason: string): Promise<void> {
+  await updateWebhookEventStatus(eventId, processingToken, "failed", reason);
 }
 
 async function updateWebhookEventStatus(
   eventId: string,
+  processingToken: string,
   status: "completed" | "failed",
   lastError: string | null,
 ): Promise<void> {
   const database = createDatabaseClient();
-  const { error } = await database
+  const { data, error } = await database
     .from("webhook_events")
     .update({ status, last_error: lastError, updated_at: new Date().toISOString() })
-    .eq("id", eventId);
+    .eq("id", eventId)
+    .eq("status", "processing")
+    .eq("processing_token", processingToken)
+    .select("id")
+    .maybeSingle();
   throwDatabaseError(`Could not mark webhook event ${status}`, error);
+  if (!data) throw new Error(`Could not mark webhook event ${status}: processing lease was lost.`);
 }

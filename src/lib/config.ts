@@ -24,25 +24,15 @@ function readPositiveInteger(name: string, fallback: number): number {
   return value;
 }
 
-function readProviderMode(): "live" | "mock" {
-  const value = readOptional("PROVIDER_MODE", "mock");
-
-  if (value !== "live" && value !== "mock") {
-    throw new Error("PROVIDER_MODE must be either live or mock.");
-  }
-
-  return value;
-}
-
 export const config = {
-  get providerMode() {
-    return readProviderMode();
+  get aiGatewayApiKey() {
+    return readRequired("AI_GATEWAY_API_KEY");
   },
-  get openAiApiKey() {
-    return readRequired("OPENAI_API_KEY");
+  get aiModel() {
+    return readOptional("AI_MODEL", "openai/gpt-5.6-luna");
   },
-  get openAiModel() {
-    return readRequired("OPENAI_MODEL");
+  get publicAppUrl() {
+    return readRequired("PUBLIC_APP_URL");
   },
   get metaVerifyToken() {
     return readRequired("META_VERIFY_TOKEN");
@@ -60,22 +50,16 @@ export const config = {
     return readOptional("META_SPECIAL_AD_CATEGORY", "HOUSING");
   },
   get metaAdAccountId() {
-    return this.providerMode === "mock"
-      ? readOptional("META_AD_ACCOUNT_ID", "mock-ad-account")
-      : readRequired("META_AD_ACCOUNT_ID");
+    return readRequired("META_AD_ACCOUNT_ID");
   },
   get metaPageId() {
-    return this.providerMode === "mock" ? readOptional("META_PAGE_ID", "mock-page") : readRequired("META_PAGE_ID");
+    return readRequired("META_PAGE_ID");
   },
   get whatsappPhoneNumberId() {
-    return this.providerMode === "mock"
-      ? readOptional("WHATSAPP_PHONE_NUMBER_ID", "mock-phone-number-id")
-      : readRequired("WHATSAPP_PHONE_NUMBER_ID");
+    return readRequired("WHATSAPP_PHONE_NUMBER_ID");
   },
   get whatsappBusinessPhoneNumber() {
-    return this.providerMode === "mock"
-      ? readOptional("WHATSAPP_BUSINESS_PHONE_NUMBER", "919999999999")
-      : readRequired("WHATSAPP_BUSINESS_PHONE_NUMBER");
+    return readRequired("WHATSAPP_BUSINESS_PHONE_NUMBER");
   },
   get supabaseUrl() {
     return readRequired("NEXT_PUBLIC_SUPABASE_URL");

@@ -65,11 +65,11 @@ createMetaAdSetStep.maxRetries = 0;
 export async function uploadMetaImageStep(launch: ApprovedLaunch): Promise<string> {
   "use step";
 
-  const mediaAssetId = launch.content.mediaAssetIds[0];
-  if (!mediaAssetId) {
-    throw new Error("An approved proposal must contain at least one property image.");
-  }
+  const mediaAssetId = launch.content.creativeMediaAssetId;
   const image = await getMediaBytes(mediaAssetId, launch.businessId);
+  if (image.mimeType !== "image/jpeg" && image.mimeType !== "image/png") {
+    throw new Error("The approved ad creative is not a publishable JPEG or PNG image.");
+  }
 
   return runMetaCreate(launch, "image", { mediaAssetId }, () => uploadAdImage(image));
 }

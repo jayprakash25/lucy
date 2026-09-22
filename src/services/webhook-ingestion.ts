@@ -25,7 +25,7 @@ export async function ingestSignedWebhook(
   await Promise.all(
     dispatchable.map(async (event) => {
       try {
-        const run = await start(processProviderEventWorkflow, [event.id]);
+        const run = await start(processProviderEventWorkflow, [event.id, crypto.randomUUID()]);
         await markWebhookDispatched(event.id, run.runId);
       } catch (error) {
         const reason = error instanceof Error ? error.message : "Unknown workflow dispatch failure";
